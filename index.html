@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Story Chain</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root { --bg:#0f1115; --card:#171a21; --muted:#9aa4b2; --text:#e7ecf3; --accent:#6ae3ff; --danger:#ff6b6b; }
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial,sans-serif}
+    .wrap{max-width:950px;margin:24px auto;padding:0 16px;display:grid;grid-template-columns:320px 1fr;gap:16px}
+    .card{background:var(--card);border:1px solid #222834;border-radius:16px;padding:16px}
+    h1{font-size:24px;margin:0 0 12px}
+    label{display:block;font-size:13px;color:var(--muted);margin:12px 0 6px}
+    input,button,textarea{width:100%;padding:10px 12px;border-radius:10px;border:1px solid #2a3140;background:#0d1117;color:var(--text);outline:none}
+    input:focus,textarea:focus{border-color:var(--accent)}
+    button{cursor:pointer;background:#0f1722;border-color:#2a3140}
+    button.primary{background:linear-gradient(180deg,#0b2430,#0e1b24);border:1px solid #1e2a35}
+    button.primary:hover{filter:brightness(1.05)}
+    button:disabled{opacity:.5;cursor:not-allowed}
+    .row{display:flex;gap:8px}
+    .roomcode{font-family:ui-monospace,Menlo,Consolas,monospace;font-weight:700;letter-spacing:1px}
+    .muted{color:var(--muted);font-size:13px}
+    .story{height:60vh;overflow:auto;border-radius:12px;border:1px solid #222834;background:#0d1117;padding:14px;line-height:1.55}
+    .sentence{margin:0 0 10px}
+    .by{color:var(--muted);font-size:12px;margin-left:6px}
+    .pill{display:inline-block;padding:2px 8px;border-radius:999px;background:#0f1722;border:1px solid #253142;font-size:12px}
+    .toolbar{display:flex;gap:8px;flex-wrap:wrap}
+    .bad{border-color:var(--danger)!important}
+    .spacer{height:8px}
+    .footer{margin-top:10px;display:flex;gap:8px;align-items:center;justify-content:space-between}
+    @media (max-width:900px){.wrap{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <aside class="card">
+      <h1>Story Chain</h1>
+      <div class="muted">Make a room, share the code, and build chaos one sentence at a time.</div>
+
+      <label>Your display name</label>
+      <input id="nameInput" placeholder="e.g., Tristan" maxlength="20" />
+
+      <label>Room code</label>
+      <div class="row">
+        <input id="roomInput" placeholder="ABC123" class="roomcode" maxlength="6" />
+        <button id="createBtn" title="Create new room">Create</button>
+      </div>
+      <button id="joinBtn" class="primary" style="margin-top:8px">Join Room</button>
+
+      <div class="spacer"></div>
+      <div class="muted" id="status">Not connected.</div>
+      <div class="spacer"></div>
+
+      <div class="toolbar">
+        <button id="copyInviteBtn" disabled>Copy Invite Link</button>
+        <button id="exportBtn" disabled>Export .txt</button>
+        <button id="leaveBtn" disabled>Leave</button>
+      </div>
+
+      <div class="spacer"></div>
+      <div class="muted">Tip: Send one complete sentence at a time. Ends in <span class="pill">.</span> <span class="pill">!</span> <span class="pill">?</span></div>
+    </aside>
+
+    <main class="card">
+      <div class="row" style="align-items:center;justify-content:space-between">
+        <div>Room: <span id="roomLabel" class="roomcode">—</span></div>
+        <div class="muted">People are typing… <span id="typingDot" style="opacity:.3">●</span></div>
+      </div>
+
+      <div id="story" class="story" aria-live="polite"></div>
+
+      <label style="margin-top:12px">Your next sentence</label>
+      <textarea id="sentenceInput" rows="3" placeholder="Add the next sentence…" maxlength="220"></textarea>
+      <div class="footer">
+        <div class="muted" id="cooldownLabel">Ready</div>
+        <div class="row" style="width:auto">
+          <button id="randomPromptBtn" title="Need inspo?">Prompt</button>
+          <button id="sendBtn" class="primary">Send →</button>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Firebase SDKs (compat for simplicity) -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.3/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.3/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.3/firebase-auth-compat.js"></script>
+  <script>
+    // 1) DROP YOUR FIREBASE CONFIG HERE
+    const firebaseConfig = {
+  apiKey: "AIzaSyD2y6fvwJ0WwFHvnspoYav3der9L6mh9q8",
+  authDomain: "chat-80449.firebaseapp.com",
+  projectId: "chat-80449",
+  storageBucket: "chat-80449.firebasestorage.app",
+  messagingSenderId: "807430068436",
+  appId: "1:807430068436:web:3dcdad59c8acdb8d3f4341",
+  measurementId: "G-MSJGGFEYHS"
+    };
+
+    // --- Basic Helpers ---
+    const $ = (id) => document.getElementById(id);
+    const state = {
+      user: null,
+      room: null,
+      unsub: null,
+      cooldownMs: 7000,
+      lastSentAt: 0
+    };
+
+    const prompts = [
+      "Out of nowhere, the vending machine whispered a secret.",
+      "We all agreed never to talk about the raccoon again.",
+      "The elevator stopped on a floor that didn’t exist yesterday.",
+      "Grandma’s cookie recipe included one illegal ingredient.",
+      "Every mirror in the house started showing tomorrow."
+    ];
+
+    // 2) Init Firebase
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+
+    // Anonymous auth (keeps a stable uid per browser)
+    firebase.auth().signInAnonymously().catch(console.error);
+    firebase.auth().onAuthStateChanged((u) => state.user = u);
+
+    // --- UI Elements ---
+    const nameInput = $("nameInput");
+    const roomInput = $("roomInput");
+    const createBtn = $("createBtn");
+    const joinBtn = $("joinBtn");
+    const copyInviteBtn = $("copyInviteBtn");
+    const exportBtn = $("exportBtn");
+    const leaveBtn = $("leaveBtn");
+    const statusEl = $("status");
+    const roomLabel = $("roomLabel");
+    const storyEl = $("story");
+    const sentenceInput = $("sentenceInput");
+    const sendBtn = $("sendBtn");
+    const cooldownLabel = $("cooldownLabel");
+    const typingDot = $("typingDot");
+    const randomPromptBtn = $("randomPromptBtn");
+
+    // --- Room Code Helpers ---
+    const randomCode = () => Array.from(crypto.getRandomValues(new Uint8Array(6)))
+      .map(n => "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"[n % 36]).join("");
+
+    const normalizeCode = (s) => (s||"").toUpperCase().replace(/[^A-Z0-9]/g,"").slice(0,6);
+
+    // Pre-fill from URL ?room=CODE
+    const urlParams = new URLSearchParams(location.search);
+    const preRoom = normalizeCode(urlParams.get("room"));
+    if (preRoom) roomInput.value = preRoom;
+
+    // --- Realtime subscription ---
+    async function subscribe(room) {
+      if (state.unsub) state.unsub();
+      storyEl.innerHTML = "";
+      state.room = room;
+      roomLabel.textContent = room || "—";
+
+      if (!room) {
+        statusEl.textContent = "Left room.";
+        copyInviteBtn.disabled = exportBtn.disabled = leaveBtn.disabled = true;
+        return;
+      }
+
+      // Create room doc if missing
+      const roomRef = db.collection("rooms").doc(room);
+      const doc = await roomRef.get();
+      if (!doc.exists) {
+        await roomRef.set({ createdAt: firebase.firestore.FieldValue.serverTimestamp() });
+      }
+
+      // Listen to sentences subcollection
+      state.unsub = roomRef.collection("sentences")
+        .orderBy("createdAt","asc")
+        .onSnapshot((snap) => {
+          storyEl.innerHTML = "";
+          snap.forEach((d) => {
+            const s = d.data();
+            const p = document.createElement("p");
+            p.className = "sentence";
+            p.textContent = s.text;
+            const by = document.createElement("span");
+            by.className = "by";
+            by.textContent = `— ${s.name || "Anon"}`;
+            p.appendChild(by);
+            storyEl.appendChild(p);
+          });
+          storyEl.scrollTop = storyEl.scrollHeight;
+          statusEl.textContent = `Connected to ${room} (${snap.size} lines)`;
+        });
+
+      // Enable actions
+      copyInviteBtn.disabled = exportBtn.disabled = leaveBtn.disabled = false;
+      history.replaceState({}, "", `?room=${room}`);
+    }
+
+    // --- Actions ---
+    createBtn.onclick = () => {
+      roomInput.value = randomCode();
+    };
+
+    joinBtn.onclick = async () => {
+      const name = nameInput.value.trim() || "Anon";
+      const room = normalizeCode(roomInput.value);
+      if (!room || room.length < 3) {
+        roomInput.classList.add("bad");
+        setTimeout(()=>roomInput.classList.remove("bad"),800);
+        return;
+      }
+      localStorage.setItem("storyChain:name", name);
+      localStorage.setItem("storyChain:room", room);
+      subscribe(room);
+    };
+
+    copyInviteBtn.onclick = async () => {
+      if (!state.room) return;
+      const url = `${location.origin}${location.pathname}?room=${state.room}`;
+      await navigator.clipboard.writeText(url);
+      statusEl.textContent = "Invite link copied!";
+    };
+
+    exportBtn.onclick = async () => {
+      if (!state.room) return;
+      const roomRef = db.collection("rooms").doc(state.room);
+      const snap = await roomRef.collection("sentences").orderBy("createdAt","asc").get();
+      const lines = [];
+      snap.forEach(d => lines.push(d.data().text));
+      const blob = new Blob([lines.join(" ") + "\n\n— Story Chain"], { type: "text/plain" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `story-${state.room}.txt`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    };
+
+    leaveBtn.onclick = () => {
+      subscribe(null);
+    };
+
+    randomPromptBtn.onclick = () => {
+      sentenceInput.value = prompts[Math.floor(Math.random()*prompts.length)];
+      sentenceInput.focus();
+    };
+
+    // Typing indicator (local pulse)
+    let pulse = 0;
+    setInterval(()=> typingDot.style.opacity = 0.3 + Math.abs(Math.sin(++pulse/6))*0.7, 100);
+
+    // Cooldown updater
+    setInterval(()=>{
+      const left = Math.max(0, state.cooldownMs - (Date.now() - state.lastSentAt));
+      cooldownLabel.textContent = left ? `Cooldown: ${(left/1000).toFixed(1)}s` : "Ready";
+      sendBtn.disabled = !!left || !state.room;
+    }, 100);
+
+    sendBtn.onclick = async () => {
+      if (!state.room) return;
+      const now = Date.now();
+      if (now - state.lastSentAt < state.cooldownMs) return;
+
+      let text = (sentenceInput.value || "").trim();
+      if (!text) return;
+
+      // Enforce sentence-ish ending
+      if (!/[.!?]"?$/.test(text)) text += ".";
+
+      const name = nameInput.value.trim() || localStorage.getItem("storyChain:name") || "Anon";
+      const roomRef = db.collection("rooms").doc(state.room);
+      await roomRef.collection("sentences").add({
+        text,
+        name,
+        uid: state.user?.uid || null,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+
+      state.lastSentAt = now;
+      sentenceInput.value = "";
+      sentenceInput.focus();
+    };
+
+    // Restore last used name/room
+    const savedName = localStorage.getItem("storyChain:name");
+    if (savedName) nameInput.value = savedName;
+    const savedRoom = localStorage.getItem("storyChain:room");
+    if (!preRoom && savedRoom) roomInput.value = savedRoom;
+
+    // Auto-join if ?room present
+    if (preRoom) subscribe(preRoom);
+  </script>
+</body>
+</html>
