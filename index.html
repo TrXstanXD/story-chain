@@ -2,22 +2,24 @@
 <html lang="en">
 <head>
   <!-- ====== Discord / Open Graph preview ====== -->
-<meta name="description" content="Story Chain — a chaotic, sentence-by-sentence group story. Made by Tristan.">
+  <meta name="description" content="Story Chain — a chaotic, sentence-by-sentence group story. Made by Tristan.">
 
-<!-- Set these to your live URL + image -->
-<link rel="canonical" href="https://trxstanxd.github.io/story-chain/">
-<meta property="og:type" content="website">
-<meta property="og:url" content="https://trxstanxd.github.io/story-chain/">
-<meta property="og:title" content="Story Chain">
-<meta property="og:site_name" content="Story Chain">
-<meta property="og:description" content="Invite-only, realtime storytelling with your friends. Made by Tristan.">
-<meta property="og:image" content="https://YOUR-DOMAIN.com/og-image.png">
+  <!-- Set to your live URL + image -->
+  <link rel="canonical" href="https://trxstanxd.github.io/story-chain/">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://trxstanxd.github.io/story-chain/">
+  <meta property="og:title" content="Story Chain">
+  <meta property="og:site_name" content="Story Chain">
+  <meta property="og:description" content="Invite-only, realtime storytelling with your friends. Made by Tristan.">
+  <meta property="og:image" content="https://trxstanxd.github.io/story-chain/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
 
-<!-- Twitter card (Discord reads OG above; this helps elsewhere) -->
-<meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="Story Chain">
-<meta name="twitter:description" content="Invite-only, realtime storytelling with your friends. Made by Tristan.">
-<meta name="twitter:image" content="https://YOUR-DOMAIN.com/og-image.png">
+  <!-- Twitter card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Story Chain">
+  <meta name="twitter:description" content="Invite-only, realtime storytelling with your friends. Made by Tristan.">
+  <meta name="twitter:image" content="https://trxstanxd.github.io/story-chain/og-image.png">
 
   <meta charset="UTF-8" />
   <title>Story Chain</title>
@@ -105,26 +107,20 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.3/firebase-firestore-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.3/firebase-auth-compat.js"></script>
   <script>
-    // 1) DROP YOUR FIREBASE CONFIG HERE
+    // 1) Your Firebase config (already filled)
     const firebaseConfig = {
-  apiKey: "AIzaSyD2y6fvwJ0WwFHvnspoYav3der9L6mh9q8",
-  authDomain: "chat-80449.firebaseapp.com",
-  projectId: "chat-80449",
-  storageBucket: "chat-80449.firebasestorage.app",
-  messagingSenderId: "807430068436",
-  appId: "1:807430068436:web:3dcdad59c8acdb8d3f4341",
-  measurementId: "G-MSJGGFEYHS"
+      apiKey: "AIzaSyD2y6fvwJ0WwFHvnspoYav3der9L6mh9q8",
+      authDomain: "chat-80449.firebaseapp.com",
+      projectId: "chat-80449",
+      storageBucket: "chat-80449.firebasestorage.app",
+      messagingSenderId: "807430068436",
+      appId: "1:807430068436:web:3dcdad59c8acdb8d3f4341",
+      measurementId: "G-MSJGGFEYHS"
     };
 
     // --- Basic Helpers ---
     const $ = (id) => document.getElementById(id);
-    const state = {
-      user: null,
-      room: null,
-      unsub: null,
-      cooldownMs: 7000,
-      lastSentAt: 0
-    };
+    const state = { user:null, room:null, unsub:null, cooldownMs:7000, lastSentAt:0 };
 
     const prompts = [
       "Out of nowhere, the vending machine whispered a secret.",
@@ -138,7 +134,7 @@
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
 
-    // Anonymous auth (keeps a stable uid per browser)
+    // Anonymous auth
     firebase.auth().signInAnonymously().catch(console.error);
     firebase.auth().onAuthStateChanged((u) => state.user = u);
 
@@ -162,7 +158,6 @@
     // --- Room Code Helpers ---
     const randomCode = () => Array.from(crypto.getRandomValues(new Uint8Array(6)))
       .map(n => "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"[n % 36]).join("");
-
     const normalizeCode = (s) => (s||"").toUpperCase().replace(/[^A-Z0-9]/g,"").slice(0,6);
 
     // Pre-fill from URL ?room=CODE
@@ -216,9 +211,7 @@
     }
 
     // --- Actions ---
-    createBtn.onclick = () => {
-      roomInput.value = randomCode();
-    };
+    createBtn.onclick = () => { roomInput.value = randomCode(); };
 
     joinBtn.onclick = async () => {
       const name = nameInput.value.trim() || "Anon";
@@ -254,9 +247,7 @@
       URL.revokeObjectURL(a.href);
     };
 
-    leaveBtn.onclick = () => {
-      subscribe(null);
-    };
+    leaveBtn.onclick = () => { subscribe(null); };
 
     randomPromptBtn.onclick = () => {
       sentenceInput.value = prompts[Math.floor(Math.random()*prompts.length)];
